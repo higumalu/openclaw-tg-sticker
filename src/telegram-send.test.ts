@@ -1,7 +1,9 @@
 import * as assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildGetStickerSetUrl,
   buildSendStickerUrl,
+  getStickerSetDirect,
   resolveTelegramApiRoot,
   resolveTelegramBotToken,
   sendStickerDirect,
@@ -90,6 +92,35 @@ describe("sendStickerDirect", () => {
     });
     assert.equal("message_thread_id" in seen, false);
   });
+
+  it("supports form-urlencoded body (curl -d style)", async () => {
+    let contentType = "";
+    let bodyStr = "";
+    const fetchImpl = async (_url: string, init?: RequestInit) => {
+      const h = init?.headers;
+      if (h instanceof Headers) {
+        contentType = h.get("content-type") ?? "";
+      } else if (h && typeof h === "object") {
+        contentType = String((h as Record<string, string>)["content-type"] ?? "");
+      }
+      bodyStr = String(init?.body);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await sendStickerDirect({
+      apiRoot: "https://api.telegram.org",
+      botToken: "tok",
+      chatId: 6881850644,
+      stickerFileId: "CAAC_test_file",
+      bodyEncoding: "form",
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    assert.match(contentType, /application\/x-www-form-urlencoded/i);
+    assert.ok(bodyStr.includes("chat_id=6881850644"));
+    assert.ok(bodyStr.includes("sticker="));
+  });
 });
 
 describe("buildSendStickerUrl", () => {
@@ -98,5 +129,70 @@ describe("buildSendStickerUrl", () => {
       buildSendStickerUrl("https://api.telegram.org", "A:B"),
       "https://api.telegram.org/botA:B/sendSticker",
     );
+  });
+});
+
+describe("buildGetStickerSetUrl", () => {
+  it("joins api root and getStickerSet path", () => {
+    assert.equal(
+      buildGetStickerSetUrl("https://api.telegram.org", "A:B"),
+      "https://api.telegram.org/botA:B/getStickerSet",
+    );
+  });
+});
+
+describe("getStickerSetDirect", () => {
+  it("POSTs name and maps stickers", async () => {
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      assert.match(url, /\/botTEST\/getStickerSet$/);
+      assert.equal(JSON.parse(String(init?.body)).name, "my_pack");
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            name: "my_pack",
+            title: "My Pack",
+            stickers: [
+              { file_id: "AAA", emoji: "😀" },
+              { file_id: "BBB", emoji: "" },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    const r = await getStickerSetDirect({
+      apiRoot: "https://api.telegram.org",
+      botToken: "TEST",
+      stickerSetName: "my_pack",
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.name, "my_pack");
+      assert.equal(r.title, "My Pack");
+      assert.equal(r.stickers.length, 2);
+      assert.equal(r.stickers[0]?.fileId, "AAA");
+      assert.equal(r.stickers[0]?.emoji, "😀");
+      assert.equal(r.stickers[1]?.position, 1);
+    }
+  });
+
+  it("maps Telegram errors", async () => {
+    const fetchImpl = async () =>
+      new Response(JSON.stringify({ ok: false, description: "STICKERSET_INVALID" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const r = await getStickerSetDirect({
+      apiRoot: "https://api.telegram.org",
+      botToken: "T",
+      stickerSetName: "nope",
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(r.telegramDescription, "STICKERSET_INVALID");
+    }
   });
 });

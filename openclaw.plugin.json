@@ -9,7 +9,9 @@
       "tg_sticker_remove",
       "tg_sticker_list",
       "tg_sticker_get",
-      "tg_sticker_send"
+      "tg_sticker_send",
+      "tg_sticker_import_pack",
+      "tg_sticker_batch_update"
     ]
   },
   "toolMetadata": {
@@ -18,7 +20,9 @@
     "tg_sticker_remove": { "optional": true },
     "tg_sticker_list": { "optional": true },
     "tg_sticker_get": { "optional": true },
-    "tg_sticker_send": { "optional": true }
+    "tg_sticker_send": { "optional": true },
+    "tg_sticker_import_pack": { "optional": true },
+    "tg_sticker_batch_update": { "optional": true }
   },
   "activation": {
     "onStartup": true
@@ -53,6 +57,16 @@
       "botTokenOverride": {
         "type": "string",
         "description": "Optional bot token for tg_sticker_send; defaults to channels.telegram"
+      },
+      "stickerPromptNudge": {
+        "type": "string",
+        "enum": ["prepend_reminder", "system_only"],
+        "description": "prepend_reminder (default): short per-turn prependContext so the model considers tg_sticker_send. system_only: appendSystemContext policy only."
+      },
+      "sendStickerBodyEncoding": {
+        "type": "string",
+        "enum": ["json", "form"],
+        "description": "tg_sticker_send: json (default) or form (x-www-form-urlencoded, curl -d style)"
       }
     }
   }

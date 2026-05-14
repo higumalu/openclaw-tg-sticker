@@ -8,7 +8,7 @@
   "files": ["dist", "openclaw.plugin.json", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.json && node --test dist/library.test.js dist/telegram-send.test.js",
+    "test": "tsc -p tsconfig.json && node --test dist/library.test.js dist/prompt.test.js dist/sticker-set.test.js dist/telegram-send.test.js dist/tools-batch.test.js",
     "prepack": "npm run build"
   },
   "engines": {

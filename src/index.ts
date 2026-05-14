@@ -3,8 +3,8 @@ import {
   definePluginEntry,
 } from "openclaw/plugin-sdk/plugin-entry";
 import { readPluginStickerConfig, readStickerLibraryCached } from "./library.js";
-import { buildTelegramStickerPromptSection } from "./prompt.js";
-import { createStickerTools, createTgStickerSendTool, runLegacyMigrationIfNeeded } from "./tools.js";
+import { buildStickerPrependReminder, buildTelegramStickerPromptSection } from "./prompt.js";
+import { createStickerTools, createTgStickerImportPackTool, createTgStickerSendTool, runLegacyMigrationIfNeeded } from "./tools.js";
 
 const PLUGIN_ID = "tg-sticker-reply";
 
@@ -40,6 +40,18 @@ const configSchema = buildJsonPluginConfigSchema({
       type: "string",
       description: "Optional bot token for tg_sticker_send; defaults to channels.telegram from runtime config.",
     },
+    stickerPromptNudge: {
+      type: "string",
+      enum: ["prepend_reminder", "system_only"],
+      description:
+        "prepend_reminder (default): short per-turn prependContext so the model considers tg_sticker_send. system_only: long policy in appendSystemContext only (models may ignore).",
+    },
+    sendStickerBodyEncoding: {
+      type: "string",
+      enum: ["json", "form"],
+      description:
+        "tg_sticker_send HTTP body: json (default) or form (application/x-www-form-urlencoded, same shape as curl -d).",
+    },
   },
 });
 
@@ -65,7 +77,9 @@ export default definePluginEntry({
         if (lib.stickers.length === 0 && pc.enableStickerSearchHint === false) {
           return;
         }
-        return { appendSystemContext: buildTelegramStickerPromptSection(lib, pc) };
+        const appendSystemContext = buildTelegramStickerPromptSection(lib, pc);
+        const prependContext = buildStickerPrependReminder(lib, pc);
+        return prependContext ? { appendSystemContext, prependContext } : { appendSystemContext };
       },
       { priority: 40 },
     );
@@ -76,5 +90,6 @@ export default definePluginEntry({
     }
 
     api.registerTool((tc) => createTgStickerSendTool(api, tc), { name: "tg_sticker_send", optional: true });
+    api.registerTool((tc) => createTgStickerImportPackTool(api, tc), { name: "tg_sticker_import_pack", optional: true });
   },
 });

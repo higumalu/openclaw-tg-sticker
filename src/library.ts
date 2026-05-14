@@ -187,6 +187,16 @@ export type PluginStickerConfig = {
   allowExplicitChatId?: boolean;
   /** Optional override bot token for sendSticker (otherwise use channels.telegram from runtime config). */
   botTokenOverride?: string;
+  /**
+   * How to surface sticker policy to the model.
+   * - `prepend_reminder` (default): add a short per-turn prependContext nudge so the model actually considers tg_sticker_send.
+   * - `system_only`: only appendSystemContext (older behavior; models may ignore long policy blocks).
+   */
+  stickerPromptNudge?: "prepend_reminder" | "system_only";
+  /**
+   * Telegram Bot API sendSticker body: `json` (default) or `form` (x-www-form-urlencoded, same as curl `-d`).
+   */
+  sendStickerBodyEncoding?: "json" | "form";
 };
 
 export function readPluginStickerConfig(pluginConfig: Record<string, unknown> | undefined): PluginStickerConfig {
@@ -205,6 +215,10 @@ export function readPluginStickerConfig(pluginConfig: Record<string, unknown> | 
     typeof pluginConfig.botTokenOverride === "string" && pluginConfig.botTokenOverride.trim()
       ? pluginConfig.botTokenOverride.trim()
       : undefined;
+  const stickerPromptNudge =
+    pluginConfig.stickerPromptNudge === "system_only" ? "system_only" : "prepend_reminder";
+  const sendStickerBodyEncoding =
+    pluginConfig.sendStickerBodyEncoding === "form" ? "form" : "json";
   return {
     maxCatalogLines,
     enableStickerSearchHint,
@@ -212,5 +226,7 @@ export function readPluginStickerConfig(pluginConfig: Record<string, unknown> | 
     stickerMap,
     allowExplicitChatId,
     botTokenOverride,
+    stickerPromptNudge,
+    sendStickerBodyEncoding,
   };
 }
