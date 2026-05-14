@@ -1,7 +1,7 @@
 {
   "id": "tg-sticker-reply",
   "name": "Telegram sticker reply",
-  "description": "Global sticker library (JSON), CRUD tools, direct Bot API send (tg_sticker_send), and Telegram prompt policy.",
+  "description": "Global sticker library (JSON), CRUD tools, Bot API sendSticker (tg_sticker_send as default plugin tool), and Telegram prompt policy.",
   "contracts": {
     "tools": [
       "tg_sticker_add",
@@ -20,7 +20,7 @@
     "tg_sticker_remove": { "optional": true },
     "tg_sticker_list": { "optional": true },
     "tg_sticker_get": { "optional": true },
-    "tg_sticker_send": { "optional": true },
+    "tg_sticker_send": { "optional": false },
     "tg_sticker_import_pack": { "optional": true },
     "tg_sticker_batch_update": { "optional": true }
   },

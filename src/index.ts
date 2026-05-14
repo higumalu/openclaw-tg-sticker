@@ -59,7 +59,7 @@ export default definePluginEntry({
   id: PLUGIN_ID,
   name: "Telegram sticker reply",
   description:
-    "Global sticker library (JSON), CRUD tools, optional direct Bot API send (tg_sticker_send), and Telegram-only prompt policy.",
+    "Global sticker library (JSON), CRUD tools, Telegram Bot API sendSticker via tg_sticker_send (default plugin tool surface), and Telegram-only prompt policy.",
   configSchema,
   register(api) {
     void runLegacyMigrationIfNeeded(api).catch((err) => {
@@ -89,7 +89,7 @@ export default definePluginEntry({
       api.registerTool(() => bound, { name: bound.name, optional: true });
     }
 
-    api.registerTool((tc) => createTgStickerSendTool(api, tc), { name: "tg_sticker_send", optional: true });
+    api.registerTool((tc) => createTgStickerSendTool(api, tc), { name: "tg_sticker_send", optional: false });
     api.registerTool((tc) => createTgStickerImportPackTool(api, tc), { name: "tg_sticker_import_pack", optional: true });
   },
 });

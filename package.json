@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "openclaw.plugin.json", "README.md"],
+  "files": ["dist", "openclaw.plugin.json", "README.md", "OPENCLAW.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "tsc -p tsconfig.json && node --test dist/library.test.js dist/prompt.test.js dist/sticker-set.test.js dist/telegram-send.test.js dist/tools-batch.test.js",
