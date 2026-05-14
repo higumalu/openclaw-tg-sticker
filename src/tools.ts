@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { randomUUID } from "node:crypto";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import type { OpenClawPluginApi, OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 import {
   isValidStickerId,
   mergeLegacyStickerMap,
@@ -13,6 +13,12 @@ import {
   type StickerEntry,
   type StickerLibraryFile,
 } from "./library.js";
+import {
+  resolveTelegramApiRoot,
+  resolveTelegramBotToken,
+  sendStickerDirect,
+  shouldIncludeMessageThreadId,
+} from "./telegram-send.js";
 
 function maskFileId(fileId: string): string {
   if (fileId.length <= 16) {
@@ -36,9 +42,12 @@ export function createStickerTools(api: OpenClawPluginApi) {
       name: "tg_sticker_add",
       label: "Add Telegram sticker to library",
       description:
-        "Register a Telegram sticker file_id with a natural-language meaning for this gateway. Requires channels.telegram.actions.sticker enabled to send. Prefer static .webp stickers.",
+        "Register a sticker file_id for this gateway bot. The file_id MUST come from this bot's context (e.g. user forwarded sticker to this bot); IDs from other bots will fail on send. Prefer static .webp. Sending: tg_sticker_send or channel action.",
       parameters: Type.Object({
-        fileId: Type.String({ description: "Telegram sticker file_id (same bot context)." }),
+        fileId: Type.String({
+          description:
+            "Sticker file_id valid for THIS gateway bot only (from inbound/forward to this bot). Not portable from other bots.",
+        }),
         meaning: Type.String({ description: "What this sticker represents (for the model to match tone)." }),
         id: Type.Optional(Type.String({ description: "Optional slug id [a-zA-Z0-9_-]{1,64}; random id if omitted or invalid." })),
         notes: Type.Optional(Type.String({ description: "Operator notes (not shown to model in catalog)." })),
@@ -165,7 +174,8 @@ export function createStickerTools(api: OpenClawPluginApi) {
     {
       name: "tg_sticker_get",
       label: "Get Telegram sticker file_id by id",
-      description: "Return full file_id and meaning for a library entry. Use with channel sticker action when sending.",
+      description:
+        "Return full file_id and meaning for a library entry. Prefer tg_sticker_send to deliver; channel sticker action remains a fallback.",
       parameters: Type.Object({
         id: Type.String({ description: "Sticker entry id from tg_sticker_list." }),
       }),
@@ -180,7 +190,7 @@ export function createStickerTools(api: OpenClawPluginApi) {
           return textResult(`No sticker with id "${id}".`, { status: "not_found" as const, id });
         }
         return textResult(
-          [`id: ${s.id}`, `file_id: ${s.fileId}`, `meaning: ${s.meaning}`, "", "Send via channel action sticker + channel telegram + to from context."].join(
+          [`id: ${s.id}`, `file_id: ${s.fileId}`, `meaning: ${s.meaning}`, "", "Prefer tool tg_sticker_send(id) in Telegram sessions; or use channel sticker action as fallback."].join(
             "\n",
           ),
           { status: "ok" as const, id, fileId: s.fileId },
@@ -188,6 +198,117 @@ export function createStickerTools(api: OpenClawPluginApi) {
       },
     },
   ];
+}
+
+function resolveChatIdForSend(
+  delivery: OpenClawPluginToolContext["deliveryContext"],
+  paramsTo: unknown,
+  pluginCfg: ReturnType<typeof readPluginStickerConfig>,
+):
+  | { ok: true; chatId: string | number; threadId?: string | number }
+  | { ok: false; error: string } {
+  const deliveryTo = delivery?.to;
+  if (deliveryTo === undefined || deliveryTo === "") {
+    return {
+      ok: false,
+      error:
+        "No Telegram delivery target (chat). tg_sticker_send only works inside an active Telegram tool/session context.",
+    };
+  }
+  if (
+    pluginCfg.allowExplicitChatId === true &&
+    paramsTo !== undefined &&
+    paramsTo !== null &&
+    String(paramsTo).trim() !== ""
+  ) {
+    const a = String(deliveryTo).trim();
+    const b = String(paramsTo).trim();
+    if (a !== b) {
+      return { ok: false, error: `Parameter "to" must exactly match the current chat id (${a}).` };
+    }
+  }
+  const s = String(deliveryTo).trim();
+  const n = Number(s);
+  const chatId = !Number.isNaN(n) && String(n) === s ? n : s;
+  return { ok: true, chatId, threadId: delivery?.threadId };
+}
+
+export function createTgStickerSendTool(api: OpenClawPluginApi, toolCtx: OpenClawPluginToolContext) {
+  const pluginCfg = () => readPluginStickerConfig(api.pluginConfig);
+  return {
+    name: "tg_sticker_send",
+    label: "Send Telegram sticker (Bot API)",
+    description:
+      "POST sendSticker to Telegram for the current chat (deliveryContext.to). Uses channels.telegram botToken from runtime config, or plugin botTokenOverride. Bypasses OpenClaw sticker action blocks.",
+    parameters: Type.Object({
+      id: Type.String({ description: "Sticker library entry id." }),
+      to: Type.Optional(
+        Type.String({
+          description:
+            "Ignored unless plugins.entries.tg-sticker-reply.config.allowExplicitChatId is true; then must equal current chat id.",
+        }),
+      ),
+    }),
+    async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
+      const p = params as { id?: string; to?: string };
+      const id = typeof p.id === "string" ? p.id.trim() : "";
+      if (!id) {
+        return textResult("id is required.", { status: "invalid" as const });
+      }
+      if (toolCtx.messageChannel && toolCtx.messageChannel !== "telegram") {
+        return textResult("tg_sticker_send is only for Telegram.", { status: "wrong_channel" as const });
+      }
+      const runtimeCfg = toolCtx.getRuntimeConfig?.() ?? api.config;
+      const token =
+        pluginCfg().botTokenOverride?.trim() ||
+        resolveTelegramBotToken(runtimeCfg, toolCtx.deliveryContext?.accountId);
+      if (!token) {
+        return textResult(
+          "No bot token resolved (channels.telegram.botToken / accounts, or plugin botTokenOverride).",
+          { status: "no_token" as const },
+        );
+      }
+      const apiRoot = resolveTelegramApiRoot(runtimeCfg);
+      const chat = resolveChatIdForSend(toolCtx.deliveryContext, p.to, pluginCfg());
+      if (!chat.ok) {
+        return textResult(chat.error, { status: "no_chat" as const });
+      }
+      const lib = await readStickerLibraryCached(api);
+      const sticker = lib.stickers.find((x) => x.id === id);
+      if (!sticker) {
+        return textResult(`No sticker with id "${id}".`, { status: "not_found" as const, id });
+      }
+      let messageThreadId: number | undefined;
+      if (shouldIncludeMessageThreadId(chat.threadId)) {
+        const t = chat.threadId!;
+        const n = typeof t === "number" ? t : Number(String(t));
+        messageThreadId = Number.isNaN(n) ? undefined : n;
+      }
+      const result = await sendStickerDirect({
+        apiRoot,
+        botToken: token,
+        chatId: chat.chatId,
+        stickerFileId: sticker.fileId,
+        messageThreadId,
+        signal,
+      });
+      if (!result.ok) {
+        return textResult(
+          `sendSticker failed: ${result.error}${result.telegramDescription ? ` — ${result.telegramDescription}` : ""}`,
+          {
+            status: "telegram_error" as const,
+            error: result.error,
+            telegramDescription: result.telegramDescription,
+          },
+        );
+      }
+      return textResult(`Sent sticker id=${id} to chat ${String(chat.chatId)}.`, {
+        status: "ok" as const,
+        id,
+        chatId: chat.chatId,
+      });
+    },
+  };
 }
 
 export async function runLegacyMigrationIfNeeded(api: OpenClawPluginApi): Promise<void> {

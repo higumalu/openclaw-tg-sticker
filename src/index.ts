@@ -4,7 +4,7 @@ import {
 } from "openclaw/plugin-sdk/plugin-entry";
 import { readPluginStickerConfig, readStickerLibraryCached } from "./library.js";
 import { buildTelegramStickerPromptSection } from "./prompt.js";
-import { createStickerTools, runLegacyMigrationIfNeeded } from "./tools.js";
+import { createStickerTools, createTgStickerSendTool, runLegacyMigrationIfNeeded } from "./tools.js";
 
 const PLUGIN_ID = "tg-sticker-reply";
 
@@ -31,6 +31,15 @@ const configSchema = buildJsonPluginConfigSchema({
       additionalProperties: { type: "string" },
       description: "Legacy: alias → file_id. Used only when migrateLegacyStickerMap is true.",
     },
+    allowExplicitChatId: {
+      type: "boolean",
+      description:
+        "If true, tg_sticker_send accepts optional `to` only when it exactly matches deliveryContext.to (redundant explicit chat id).",
+    },
+    botTokenOverride: {
+      type: "string",
+      description: "Optional bot token for tg_sticker_send; defaults to channels.telegram from runtime config.",
+    },
   },
 });
 
@@ -38,7 +47,7 @@ export default definePluginEntry({
   id: PLUGIN_ID,
   name: "Telegram sticker reply",
   description:
-    "Global sticker library (JSON), CRUD tools, and Telegram-only prompt policy for optional sticker channel actions.",
+    "Global sticker library (JSON), CRUD tools, optional direct Bot API send (tg_sticker_send), and Telegram-only prompt policy.",
   configSchema,
   register(api) {
     void runLegacyMigrationIfNeeded(api).catch((err) => {
@@ -65,5 +74,7 @@ export default definePluginEntry({
       const bound = tool;
       api.registerTool(() => bound, { name: bound.name, optional: true });
     }
+
+    api.registerTool((tc) => createTgStickerSendTool(api, tc), { name: "tg_sticker_send", optional: true });
   },
 });

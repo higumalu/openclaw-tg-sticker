@@ -183,6 +183,10 @@ export type PluginStickerConfig = {
   enableStickerSearchHint?: boolean;
   migrateLegacyStickerMap?: boolean;
   stickerMap?: Record<string, string>;
+  /** When true, tool may pass `to` only if it equals the current session chat (same string as deliveryContext.to). */
+  allowExplicitChatId?: boolean;
+  /** Optional override bot token for sendSticker (otherwise use channels.telegram from runtime config). */
+  botTokenOverride?: string;
 };
 
 export function readPluginStickerConfig(pluginConfig: Record<string, unknown> | undefined): PluginStickerConfig {
@@ -196,5 +200,17 @@ export function readPluginStickerConfig(pluginConfig: Record<string, unknown> | 
   const enableStickerSearchHint = pluginConfig.enableStickerSearchHint !== false;
   const migrateLegacyStickerMap = pluginConfig.migrateLegacyStickerMap === true;
   const stickerMap = readLegacyStickerMap(pluginConfig);
-  return { maxCatalogLines, enableStickerSearchHint, migrateLegacyStickerMap, stickerMap };
+  const allowExplicitChatId = pluginConfig.allowExplicitChatId === true;
+  const botTokenOverride =
+    typeof pluginConfig.botTokenOverride === "string" && pluginConfig.botTokenOverride.trim()
+      ? pluginConfig.botTokenOverride.trim()
+      : undefined;
+  return {
+    maxCatalogLines,
+    enableStickerSearchHint,
+    migrateLegacyStickerMap,
+    stickerMap,
+    allowExplicitChatId,
+    botTokenOverride,
+  };
 }

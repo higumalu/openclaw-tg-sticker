@@ -1,14 +1,15 @@
 {
   "id": "tg-sticker-reply",
   "name": "Telegram sticker reply",
-  "description": "Global sticker library (JSON), CRUD tools, and Telegram prompt policy for optional sticker channel actions.",
+  "description": "Global sticker library (JSON), CRUD tools, direct Bot API send (tg_sticker_send), and Telegram prompt policy.",
   "contracts": {
     "tools": [
       "tg_sticker_add",
       "tg_sticker_update",
       "tg_sticker_remove",
       "tg_sticker_list",
-      "tg_sticker_get"
+      "tg_sticker_get",
+      "tg_sticker_send"
     ]
   },
   "toolMetadata": {
@@ -16,7 +17,8 @@
     "tg_sticker_update": { "optional": true },
     "tg_sticker_remove": { "optional": true },
     "tg_sticker_list": { "optional": true },
-    "tg_sticker_get": { "optional": true }
+    "tg_sticker_get": { "optional": true },
+    "tg_sticker_send": { "optional": true }
   },
   "activation": {
     "onStartup": true
@@ -43,6 +45,14 @@
         "type": "object",
         "additionalProperties": { "type": "string" },
         "description": "Legacy alias → file_id (used when migrateLegacyStickerMap is true)"
+      },
+      "allowExplicitChatId": {
+        "type": "boolean",
+        "description": "Allow optional to on tg_sticker_send only when equal to current chat"
+      },
+      "botTokenOverride": {
+        "type": "string",
+        "description": "Optional bot token for tg_sticker_send; defaults to channels.telegram"
       }
     }
   }
